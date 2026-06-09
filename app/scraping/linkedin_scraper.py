@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from urllib.parse import quote
 import requests
+import app.extraction.parser as parser
 from app.scraping.base_scraper import BaseScraper
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from pathlib import Path
 # ─── Configuration ────────────────────────────────────────────────────────────
 SEARCH_KEYWORDS  = ("Ingénieur Logiciel Stagiaire","Ingénieur","Stagiaire")
 LOCATION         = "Tunisia"                                # <-- Change this to any country or city!
-LIMIT            = 50                                       # Max results to fetch
+LIMIT            = 5                                      # Max results to fetch
 DELAY_BETWEEN    = 1.5                                      # Seconds between detail fetches
 
 OUTPUT_JSON = f"dumps/linkedin_dumps.json"
@@ -50,15 +51,15 @@ class LinkedInScraper(BaseScraper):
         # 3. Assign it to your request headers dictionary
         self.headers["Cookie"] = cookie_string
         self.headers["csrf-token"]=cookies["JSESSIONID"]
-    def fetch_linkedin_job_ids(self, keywords: str, location_name: str, total_jobs_to_fetch: int,) -> list:
+
+
+
+    def fetch_linkedin_job_ids(self, keywords : str, location_name: str = "Tunisia", total_jobs_to_fetch: int = 25,) -> list:
         """Step 1: Scrape the list of unique job IDs from search cards using dynamic geoId mapping."""
         base_url = "https://www.linkedin.com/voyager/api/voyagerJobsDashJobCards"
         all_job_ids = set()
         for keyword in keywords:
-            print("Keyword=",keyword)
-            encoded_keyword = quote(keyword)
-            print(encoded_keyword)
-            
+            encoded_keyword = quote(keyword)            
             for start_index in range(0, total_jobs_to_fetch, 25):
                 target_url = (
                     f"{base_url}?"
@@ -79,8 +80,9 @@ class LinkedInScraper(BaseScraper):
                     print(response.status_code)
 
                     if response.status_code == 200:
-                        found_ids = re.findall(r"jobPosting:(\d+)", response.text)
-                        all_job_ids.update(found_ids)
+                        parser.parse_job_ids(all_job_ids,response.text)
+                        if len(all_job_ids)>=total_jobs_to_fetch:
+                            return list(all_job_ids)[:total_jobs_to_fetch]
                     else:
                         print(f"  ⚠️ Error fetching pass {start_index}: HTTP {response.status_code}")
                         break
@@ -90,32 +92,8 @@ class LinkedInScraper(BaseScraper):
 
         return list(all_job_ids)[:total_jobs_to_fetch]
     
-    def get_top_card(self, payload: dict) -> dict:
-        """Safely isolates the topCard configuration dict from the GraphQL payload elements list."""
-        try:
-            elements = payload.get("data", {}).get("jobsDashJobPostingDetailSectionsByCardSectionTypes", {}).get("elements", [])
-            for element in elements:
-                for section in element.get("jobPostingDetailSection", []):
-                    if "topCard" in section and section["topCard"] is not None:
-                        return section["topCard"]
-        except (KeyError, AttributeError):
-            pass
-        return {}
-
-    def fetch_company_master_record(self, payload: dict) -> dict:
-        """Extract company profile record from the nested dictionary tree."""
-        top_card = self.get_top_card(payload)
-        return top_card.get("jobPosting", {}).get("companyDetails", {}).get("jobCompany", {}).get("company", {})
-
-    def extract_job_subtitles(self, payload: dict) -> dict:
-        """Extract job subtitles and titles from topCard directly."""
-        top_card = self.get_top_card(payload)
-        if top_card:
-            return {
-                "summary_line": top_card.get("navigationBarSubtitle"),
-                "display_title": top_card.get("jobPostingTitle")
-            }
-        return {}
+    
+    
 
     def fetch_job_details(self, job_id: str) -> dict:
         """Step 2: Pull specific detailed data metrics matching the exact template output schema."""
@@ -128,58 +106,19 @@ class LinkedInScraper(BaseScraper):
         details_headers = self.headers.copy()
         details_headers["Accept"] = "application/json"
         
-        job_data = {
-            "job_id": job_id,
-            "title": "Unknown Title",
-            "company": "Unknown Company",
-            "location": LOCATION,  
-            "posted_at": datetime.now().strftime("%Y-%m-%d %H:%M"), 
-            "remote": False,
-            "apply_url": f"https://www.linkedin.com/jobs/view/{job_id}",
-            "description_snippet": "",
-            "description_full": ""
-        }
+        
         
         try:
             response = requests.get(target_url, headers=details_headers)
             if response.status_code == 200:
-                payload_dict = response.json()
-                
-                # Use integrated class utilities to evaluate elements
-                company_record = self.fetch_company_master_record(payload_dict)
-                subtitles = self.extract_job_subtitles(payload_dict)
-                
-                # Apply dynamic parsed elements onto baseline schema dict
-                if company_record.get("name"):
-                    job_data["company"] = company_record.get("name")
-                elif subtitles.get("summary_line"):
-                    # Quick extraction split if baseline profile records fall through
-                    job_data["company"] = subtitles.get("summary_line").split("·")[0].strip()
-                
-                if subtitles.get("display_title"):
-                    job_data["title"] = subtitles.get("display_title")
-
-                # Fallback Regex Extractions for descriptions and attributes
-                response_text = response.text
-                location_matches = re.findall(r'"formattedLocation":"([^"]+)"', response_text)
-                if location_matches:
-                    job_data["location"] = location_matches[0]
-                
-                if '"workRemoteAllowed":true' in response_text or '"workPlaceIndicator":"REMOTE"' in response_text:
-                    job_data["remote"] = True
-                
-                all_text_blocks = re.findall(r'"text":"([^"]+)"', response_text)
-                if all_text_blocks:
-                    longest_block = max(all_text_blocks, key=len)
-                    clean_desc = longest_block.replace("\\n", "\n").replace('\\"', '"')
-                    job_data["description_full"] = clean_desc
-                    job_data["description_snippet"] = clean_desc[:500].replace("\n", " ")
+                job_data=parser.parse_job_details(job_id,response)
+                return job_data
             else:
                 print(f"  ⚠️ Could not fetch details for job {job_id}: Status {response.status_code}")
         except Exception as e:
             print(f"  ⚠️ Could not fetch details for job {job_id}: {e}")
             
-        return job_data
+        
 
     def scrape(self) -> list:
         """Main orchestrator block managing execution output and logging layout frames."""
@@ -202,13 +141,20 @@ class LinkedInScraper(BaseScraper):
         completed_jobs = []
         
         for idx, j_id in enumerate(job_ids, start=1):
-            job_details = self.fetch_job_details(j_id)
+            try:      
+                job_details = self.fetch_job_details(j_id)
+                print(f"   [{idx:02d}/{total_found}] {job_details['title']} @ {job_details['company']}")
+                completed_jobs.append(job_details)
+            except Exception as e:
+                print(f"Failed to fetch details for {j_id}")
             
-            print(f"   [{idx:02d}/{total_found}] {job_details['title']} @ {job_details['company']}")
-            completed_jobs.append(job_details)
+            
             
             time.sleep(DELAY_BETWEEN)
-            
+        
+
+
+        print(f"[PARSING] Parsed {len(completed_jobs)} jobs")
         # ── Write JSON Document Output ──────────────────────────────────────────
         with open(OUTPUT_JSON, "a", encoding="utf-8") as f:
             json.dump(completed_jobs, f, ensure_ascii=False, indent=2)

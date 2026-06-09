@@ -104,17 +104,7 @@ class PipelineOrchestrator:
         pass
         parsed_jobs = []
 
-        print("[PARSING] Parsing jobs...")
-
-        for raw_job in raw_jobs:
-
-            try:
-                parsed_job = parser.parse(raw_job)
-                parsed_jobs.append(parsed_job)
-
-            except Exception as e:
-                print(f"[PARSING ERROR] {e}")
-
+        
         print(f"[PARSING] Parsed {len(parsed_jobs)} jobs")
 
         # -------------------------------------------------
