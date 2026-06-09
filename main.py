@@ -5,6 +5,5 @@ from app.workflows.orchestrator import *
 from app.core.utils import *
 if __name__ == "__main__" :
     orchestrator = PipelineOrchestrator()
-    print(get_auth_cookies())
     orchestrator.run_pipeline("Software Engineer")
     

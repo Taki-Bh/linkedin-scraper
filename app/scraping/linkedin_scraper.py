@@ -6,6 +6,9 @@ from datetime import datetime
 from urllib.parse import quote
 import requests
 from app.scraping.base_scraper import BaseScraper
+from pathlib import Path
+
+
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 SEARCH_KEYWORDS  = ("Ingénieur Logiciel Stagiaire","Ingénieur","Stagiaire")
@@ -13,8 +16,8 @@ LOCATION         = "Tunisia"                                # <-- Change this to
 LIMIT            = 50                                       # Max results to fetch
 DELAY_BETWEEN    = 1.5                                      # Seconds between detail fetches
 
-OUTPUT_JSON = f"linkedin_dumps.json"
-OUTPUT_CSV  = f"linkedin_dumps.csv"
+OUTPUT_JSON = f"dumps/linkedin_dumps.json"
+OUTPUT_CSV  = f"dumps/linkedin_dumps.csv"
 # ──────────────────────────────────────────────────────────────────────────────
 
 class LinkedInScraper(BaseScraper):
@@ -214,7 +217,9 @@ class LinkedInScraper(BaseScraper):
         # ── Write CSV Document Output ───────────────────────────────────────────
         csv_fields = ["job_id", "title", "company", "location", "posted_at",
                       "remote", "apply_url", "description_snippet"]
-        
+        dumps_path=Path("dumps")
+        if not dumps_path.exists():
+            Path.mkdir("dumps")
         with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=csv_fields, extrasaction="ignore")
             writer.writeheader()

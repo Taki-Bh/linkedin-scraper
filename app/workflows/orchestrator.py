@@ -66,7 +66,7 @@ class PipelineOrchestrator:
         # -------------------------------------------------
         logger.info("Starting Authentification Process")
         logger.info("Opening the navigator")
-        async with async_playwright() as p:
+        """async with async_playwright() as p:
             browser= await p.chromium.launch(
                 headless=False,
                 args=["--start-maximized", "--lang=en-US" ],
@@ -78,7 +78,7 @@ class PipelineOrchestrator:
             await auth.login(page,"a","a")
             
             await context.storage_state(path="state.json")
-            await browser.close()
+            await browser.close()"""
             
 
 
