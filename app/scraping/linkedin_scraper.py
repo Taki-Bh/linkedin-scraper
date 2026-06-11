@@ -98,20 +98,22 @@ class LinkedInScraper(BaseScraper):
     def fetch_job_details(self, job_id: str) -> dict:
         """Step 2: Pull specific detailed data metrics matching the exact template output schema."""
         base_url = "https://www.linkedin.com/voyager/api/graphql"
-        query_id = "voyagerJobsDashJobPostingDetailSections.2bf6cded247cb2f6cc7dcda5558af592"
+        query_id1 = "voyagerJobsDashJobPostingDetailSections.2bf6cded247cb2f6cc7dcda5558af592"
         variables = f"(cardSectionTypes:List(TOP_CARD,HOW_YOU_FIT_CARD),jobPostingUrn:urn%3Ali%3Afsd_jobPosting%3A{job_id},includeSecondaryActionsV2:true,jobDetailsContext:(isJobSearch:true))"
-        
-        target_url = f"{base_url}?variables={variables}&queryId={query_id}"
-        
+        url="https://www.linkedin.com/voyager/api/graphql?&variables=(jobPostingUrn:urn%3Ali%3Afsd_jobPosting%3A4423645238)&queryId=voyagerJobsDashJobPostings.891aed7916d7453a37e4bbf5f1f60de4"
+        query_id2="voyagerJobsDashJobPostings.891aed7916d7453a37e4bbf5f1f60de4"
+        target_url1 = f"{base_url}?variables={variables}&queryId={query_id1}"
+        target_url2=f"{base_url}?variables={variables}&queryId={query_id2}"
         details_headers = self.headers.copy()
         details_headers["Accept"] = "application/json"
         
         
         
         try:
-            response = requests.get(target_url, headers=details_headers)
-            if response.status_code == 200:
-                job_data=parser.parse_job_details(job_id,response)
+            response1 = requests.get(target_url1, headers=details_headers)
+            response2 = requests.get(target_url2, headers=details_headers)
+            if response1.status_code == 200:
+                job_data=parser.parse_job_details(job_id,response1,response2)
                 return job_data
             else:
                 print(f"  ⚠️ Could not fetch details for job {job_id}: Status {response.status_code}")
@@ -162,7 +164,7 @@ class LinkedInScraper(BaseScraper):
         
         # ── Write CSV Document Output ───────────────────────────────────────────
         csv_fields = ["job_id", "title", "company", "location", "posted_at",
-                      "remote", "apply_url", "description_snippet"]
+                      "remote", "apply_url", "description","description_snippet"]
         dumps_path=Path("dumps")
         if not dumps_path.exists():
             Path.mkdir("dumps")

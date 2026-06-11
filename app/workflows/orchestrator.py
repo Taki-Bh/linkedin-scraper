@@ -12,7 +12,7 @@ logger = logging.getLogger("Pipeline")
 
 
 
-
+            # Co
 
 async def get_authenticated_context(browser):
     """Dynamically creates a context based on whether the state file exists."""
@@ -66,7 +66,9 @@ class PipelineOrchestrator:
         # -------------------------------------------------
         logger.info("Starting Authentification Process")
         logger.info("Opening the navigator")
-        """async with async_playwright() as p:
+
+        async with async_playwright() as p:
+            
             browser= await p.chromium.launch(
                 headless=False,
                 args=["--start-maximized", "--lang=en-US" ],
@@ -75,10 +77,16 @@ class PipelineOrchestrator:
             context,page= await get_authenticated_context(browser)
                 
             logger.info("Saving acquired cookies for loggin...")
-            await auth.login(page,"a","a")
+            await auth.login(page,"","")
+            # Wipe out Service Workers to prevent local service routing
             
+            # 3. ATTACH THE ROUTER TO THE WHOLE CONTEXT
+            # This acts as a proxy trap catching everything—including Web Worker traffic
+            # 2. 🔥 FIX: Offload the input prompt to a background thread.
+            # This prevents the terminal prompt from starving the asyncio event loop.
+            await asyncio.to_thread(input, "Listening for API calls... Press Enter here to stop and save state.\n")
             await context.storage_state(path="state.json")
-            await browser.close()"""
+            await browser.close()
             
 
 

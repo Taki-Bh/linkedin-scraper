@@ -56,7 +56,7 @@ def extract_job_subtitles( payload: dict) -> dict:
 
 
 
-def parse_job_details(job_id,response):
+def parse_job_details(job_id,response1,response2):
 
 
 
@@ -69,11 +69,18 @@ def parse_job_details(job_id,response):
 
 
 
-    payload_dict = response.json()
+    data1 = response1.json()
+    data2 = response2.json()
+
+
+    print(data1)
+    print("--------------------------------------------------------------------------------")
+    print(data2)
+    print("--------------------------------------------------------------------------------")
                 
-                # Use integrated class utilities to evaluate elements
-    company_record = fetch_company_master_record(payload_dict)
-    subtitles = extract_job_subtitles(payload_dict)
+            # Use integrated class utilities to evaluate elements
+    company_record = fetch_company_master_record(data1)
+    subtitles = extract_job_subtitles(data1)
                 
                 # Apply dynamic parsed elements onto baseline schema dict
     if company_record.get("name"):
@@ -86,7 +93,7 @@ def parse_job_details(job_id,response):
         job_data["title"] = subtitles.get("display_title")
 
                 # Fallback Regex Extractions for descriptions and attributes
-    response_text = response.text
+    response_text = response1.text
     location_matches = re.findall(r'"formattedLocation":"([^"]+)"', response_text)
     if location_matches:
         job_data["location"] = location_matches[0]
@@ -94,7 +101,7 @@ def parse_job_details(job_id,response):
     if '"workRemoteAllowed":true' in response_text or '"workPlaceIndicator":"REMOTE"' in response_text:
         job_data["remote"] = True
                 
-    all_text_blocks = re.findall(r'"text":"([^"]+)"', response_text)
+    all_text_blocks = re.findall(r'"text":"([^"]+)"', response2.text)
     if all_text_blocks:
         longest_block = max(all_text_blocks, key=len)
         clean_desc = longest_block.replace("\\n", "\n").replace('\\"', '"')
