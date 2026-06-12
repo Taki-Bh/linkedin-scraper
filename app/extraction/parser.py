@@ -1,7 +1,7 @@
 import requests
 from datetime import datetime
 import re
-
+import json
 #datetime.now().strftime("%Y-%m-%d %H:%M")
 job_data_temp = {
         "job_id": "{job_id}",
@@ -51,60 +51,132 @@ def extract_job_subtitles( payload: dict) -> dict:
             "display_title": top_card.get("jobPostingTitle")
         }
     return {}
-
-
-
-
-
-def parse_job_details(job_id,response1,response2):
-
-
-
-    job_data=dict(job_data_temp)
-
-
-    job_data["job_id"]=job_data["job_id"].format(job_id=job_id)
-    job_data["posted_at"]=datetime.now().strftime("%Y-%m-%d %H:%M")
-    job_data["apply_url"] =job_data["apply_url"].format(job_id=job_id)
-
-
-
-    data1 = response1.json()
-    data2 = response2.json()
-
-
-    print(data1)
-    print("--------------------------------------------------------------------------------")
-    print(data2)
-    print("--------------------------------------------------------------------------------")
+def extract_company_name(json_text):
+    try:
+        # Parse the JSON string into a Python dictionary
+        payload = json.loads(json_text)
+        
+        # Iterate through the 'included' array
+        for item in payload.get("included", []):
+            # Check if this specific item is the Company entity
+            if item.get("$type") == "com.linkedin.voyager.dash.organization.Company":
+                return item.get("name")
                 
-            # Use integrated class utilities to evaluate elements
-    company_record = fetch_company_master_record(data1)
-    subtitles = extract_job_subtitles(data1)
-                
-                # Apply dynamic parsed elements onto baseline schema dict
-    if company_record.get("name"):
-        job_data["company"] = company_record.get("name")
-    elif subtitles.get("summary_line"):
-                    # Quick extraction split if baseline profile records fall through
-        job_data["company"] = subtitles.get("summary_line").split("·")[0].strip()
-                
-    if subtitles.get("display_title"):
-        job_data["title"] = subtitles.get("display_title")
+        return "Company name not found in the payload."
+        
+    except json.JSONDecodeError:
+        return "Error: Invalid JSON format."
+def parse_job(response):
 
-                # Fallback Regex Extractions for descriptions and attributes
-    response_text = response1.text
-    location_matches = re.findall(r'"formattedLocation":"([^"]+)"', response_text)
-    if location_matches:
-        job_data["location"] = location_matches[0]
-                
-    if '"workRemoteAllowed":true' in response_text or '"workPlaceIndicator":"REMOTE"' in response_text:
-        job_data["remote"] = True
-                
-    all_text_blocks = re.findall(r'"text":"([^"]+)"', response2.text)
-    if all_text_blocks:
-        longest_block = max(all_text_blocks, key=len)
-        clean_desc = longest_block.replace("\\n", "\n").replace('\\"', '"')
-        job_data["description_full"] = clean_desc
-        job_data["description_snippet"] = clean_desc[:500].replace("\n", " ")    
-    return job_data
+    def get(d, *keys, default=None):
+        for k in keys:
+            if not isinstance(d, dict):
+                return default
+            d = d.get(k)
+            if d is None:
+                return default
+        return d
+
+    def ts_to_datetime(ts):
+        if ts is None:
+            return None
+
+        # LinkedIn timestamps are milliseconds
+        return datetime.fromtimestamp(ts / 1000)
+
+    def extract_company_id():
+        urn = get(
+            response,
+            "companyDetails",
+            "com.linkedin.voyager.jobs.JobPostingCompany",
+            "company"
+        )
+
+        if not urn:
+            return None
+
+        try:
+            return int(urn.split(":")[-1])
+        except Exception:
+            return None
+    def extract_company_name():
+        try:
+            return (
+                response["companyDetails"]
+                ["com.linkedin.voyager.jobs.JobPostingCompany"]
+                .get("companyName")
+            )
+        except Exception:
+            return None
+    return {
+        # Basic
+        "job_id": response.get("jobPostingId"),
+        "title": response.get("title"),
+
+        # Company
+        "company_id": extract_company_id(),
+        
+        "apply_url": get(
+            response,
+            "applyMethod",
+            "com.linkedin.voyager.jobs.OffsiteApply",
+            "companyApplyUrl"
+        ) or f"https://www.linkedin.com/jobs/search/?currentJobId={response.get("jobPostingId")}",
+
+        "company_description": get(
+            response,
+            "companyDescription",
+            "text"
+        ),
+
+        # Benefits
+        "benefits": response.get("benefits", []),
+
+        # Location
+        "country": response.get("country"),
+        "location": response.get("formattedLocation"),
+
+        # Dates
+        "created_at": ts_to_datetime(
+            response.get("createdAt")
+        ),
+
+        "posted_at": ts_to_datetime(
+            response.get("listedAt")
+        ),
+
+        "expire_at": ts_to_datetime(
+            response.get("expireAt")
+        ),
+
+        # Description
+        "description": get(
+            response,
+            "description",
+            "text"
+        ),
+
+        # Employment
+        "employment_status": (
+            response.get("formattedEmploymentStatus")
+            or response.get("employmentStatus")
+        ),
+
+        # Salary (flattened)
+        "salary_description": response.get(
+            "formattedSalaryDescription"
+        ),
+
+        "salary_available": get(
+            response,
+            "salaryInsights",
+            "jobCompensationAvailable"
+        ),
+
+        "salary_insight_exists": get(
+            response,
+            "salaryInsights",
+            "insightExists"
+        )
+    }
+

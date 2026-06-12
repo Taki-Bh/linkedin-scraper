@@ -20,6 +20,7 @@ async def get_authenticated_context(browser):
     if os.path.exists(STATE_FILE):
         print("🔐 Found session state! Loading cookies automatically...")
         context = await browser.new_context(
+            bypass_csp=True,
             storage_state=STATE_FILE,
             user_agent=USER_AGENT,
             locale=LOCALE
@@ -32,12 +33,35 @@ async def get_authenticated_context(browser):
         # Run the login flow to generate the missing file
         
     return context, page
-
+async def verify_logged_in(email="",password=""):
+    logger.info("Starting Authentification Process")
+    logger.info("Opening the navigator")
+    async with async_playwright() as p:
+            
+            browser= await p.chromium.launch(
+                headless=False,
+                args=["--start-maximized", "--lang=en-US" ],
+                
+            )
+            context,page= await get_authenticated_context(browser)
+                
+            logger.info("Saving acquired cookies for loggin...")
+            await auth.login(page,email,password)
+            # Wipe out Service Workers to prevent local service routing
+            
+            # 3. ATTACH THE ROUTER TO THE WHOLE CONTEXT
+            # This acts as a proxy trap catching everything—including Web Worker traffic
+            # 2. 🔥 FIX: Offload the input prompt to a background thread.
+            # This prevents the terminal prompt from starving the asyncio event loop.
+            await asyncio.to_thread(input, "Listening for API calls... Press Enter here to stop and save state.\n")
+            await context.storage_state(path="state.json")
+            await browser.close()
 class PipelineOrchestrator:
     def run_pipeline(self,keywords) -> None:
         asyncio.run(self._run_pipeline(keywords))
 
     async def _run_pipeline(self, keywords) -> None:
+
         logger.info(f"🚀 Kicking off pipeline for: {keywords}")
 
         """
@@ -64,29 +88,10 @@ class PipelineOrchestrator:
         # -------------------------------------------------
         #-- Authentification
         # -------------------------------------------------
-        logger.info("Starting Authentification Process")
-        logger.info("Opening the navigator")
-
-        async with async_playwright() as p:
-            
-            browser= await p.chromium.launch(
-                headless=False,
-                args=["--start-maximized", "--lang=en-US" ],
-                
-            )
-            context,page= await get_authenticated_context(browser)
-                
-            logger.info("Saving acquired cookies for loggin...")
-            await auth.login(page,"","")
-            # Wipe out Service Workers to prevent local service routing
-            
-            # 3. ATTACH THE ROUTER TO THE WHOLE CONTEXT
-            # This acts as a proxy trap catching everything—including Web Worker traffic
-            # 2. 🔥 FIX: Offload the input prompt to a background thread.
-            # This prevents the terminal prompt from starving the asyncio event loop.
-            await asyncio.to_thread(input, "Listening for API calls... Press Enter here to stop and save state.\n")
-            await context.storage_state(path="state.json")
-            await browser.close()
+        
+        #
+       # await verify_logged_in()
+        
             
 
 
